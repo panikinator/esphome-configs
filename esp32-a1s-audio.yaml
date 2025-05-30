@@ -1,0 +1,427 @@
+esphome:
+  name: esp32-a1s-audio
+  friendly_name: ESP32 Audio
+  # on_boot:
+  #   priority: 600
+  #   then:
+  #     - lambda: |-
+  #         // Write 0x0810 to register 0x51 (ADC_SRC)
+  #         uint8_t adc_src_data[] = {0x51, 0x08, 0x10};
+  #         id(ac101_i2c).write(adc_src_data, sizeof(adc_src_data));
+  #     - lambda: |-
+  #         // Write 0x0810 to register 0x54 (OMIXER_SR)
+  #         uint8_t omixer_sr_data[] = {0x54, 0x08, 0x10};
+  #         id(ac101_i2c).write(omixer_sr_data, sizeof(omixer_sr_data));
+  #     - lambda: |-
+  #         // Example: Setting default gain for LINE IN (adjust as needed) - Write 0x4444 to register 0x52 (ADC_SRCBST_CTRL)
+  #         uint8_t adc_srcbst_ctrl_data[] = {0x52, 0x44, 0x44};
+  #         id(ac101_i2c).write(adc_srcbst_ctrl_data, sizeof(adc_srcbst_ctrl_data));
+
+esp32:
+  board: esp-wrover-kit
+  framework:
+    type: esp-idf
+  # amplifier is not required for headphones
+  # on_boot:
+  #   then:
+  #     - output.turn_on: gpio_amp
+external_components:
+  source:
+    type: git
+    url: https://github.com/sehraf/esphome-components
+    ref: main
+  components: [ac101]
+logger:
+
+psram:
+
+api:
+  encryption:
+    key: !secret default_native_api_encryption_key
+
+ota:
+  platform: esphome
+  password: !secret default_ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Speaker A1S Fallback Hotspot"
+    password: !secret fallback_ap_password
+
+captive_portal:
+
+i2c:
+  sda: 33
+  scl: 32
+  scan: True
+
+ac101:
+  address: 0x1A
+
+# i2c_device:
+#   id: ac101_i2c
+#   address: 0x1A
+
+
+
+i2s_audio:
+  i2s_lrclk_pin: 26
+  i2s_bclk_pin: 27
+
+
+# media_player:
+#   - platform: i2s_audio
+#     id: audio_player
+#     name: "ESP32 A1S Media Player"
+#     dac_type: external
+#     i2s_dout_pin: 25
+#     mode: stereo
+
+sensor:
+  - platform: wifi_signal
+    name: "WiFi Signal Sensor"
+    id: wifi_signal_db
+    update_interval: 30s
+    device_class: "signal_strength"
+    internal: False
+  - platform: copy # Reports the WiFi signal strength in %
+    source_id: wifi_signal_db
+    internal: False
+    name: "WiFi Signal Percent"
+    filters:
+      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
+    unit_of_measurement: "%"
+    device_class: "signal_strength"
+
+# speaker:
+#   - platform: i2s_audio
+#     dac_type: external
+#     channel: stereo
+#     i2s_dout_pin: 25
+#     id: a1s_audio_player
+
+
+# speaker:
+#   - platform: i2s_audio
+#     id: i2s_speaker_id
+#     dac_type: external
+#     i2s_dout_pin: 25
+#     sample_rate: 48000
+#     channel: stereo
+# media_player:
+#   - platform: speaker
+#     name: "A1S Media Player"
+#     announcement_pipeline:
+#         format: MP3
+#         speaker: i2s_speaker_id
+#         num_channels: 2
+#         sample_rate: 48000
+#     task_stack_in_psram: true
+
+speaker:
+  - platform: i2s_audio
+    id: i2s_speaker_id
+    dac_type: external
+    i2s_dout_pin: 25
+    sample_rate: 48000
+    use_apll: True
+    bits_per_sample: 16bit
+    channel: stereo
+    buffer_duration: 1500ms
+  # - platform: mixer
+  #   id: mixer_speaker_id
+  #   output_speaker: i2s_speaker_id
+  #   source_speakers:
+  #     - id: announcement_spk_mixer_input
+  #       buffer_duration: 1000ms
+  #     - id: media_spk_mixer_input
+  #       buffer_duration: 1000ms
+  # - platform: resampler
+  #   id: media_spk_resampling_input
+  #   output_speaker: media_spk_mixer_input
+  #   sample_rate: 48000
+  #   bits_per_sample: 16
+  #   buffer_duration: 1000ms
+  # - platform: resampler
+  #   id: announcement_spk_resampling_input
+  #   output_speaker: announcement_spk_mixer_input
+  #   sample_rate: 48000
+  #   bits_per_sample: 16
+  #   buffer_duration: 1000ms
+media_player:
+  - platform: speaker
+    name: "A1S Media Player"
+    id: a1s_audio_player
+    # media_pipeline:
+    #     speaker: media_spk_resampling_input
+    #     num_channels: 2
+    #     sample_rate: 48000
+    #     format: MP3
+    # announcement_pipeline:
+    #     sample_rate: 48000
+    #     format: MP3
+    #     speaker: announcement_spk_resampling_input
+    #     num_channels: 1
+    buffer_size: 2000000
+    # task_stack_in_psram: True
+    announcement_pipeline:
+        format: MP3
+        speaker: i2s_speaker_id
+        num_channels: 2
+
+
+
+
+
+
+# microphone:
+#   - platform: i2s_audio
+#     id: mic
+#     adc_type: external
+#     channel: left
+#     i2s_din_pin: 35
+#     pdm: false
+
+
+
+# voice_assistant:
+#   id: va
+#   microphone: mic
+#   media_player: audio_player
+#   use_wake_word: false
+#   # on_client_connected:
+#   #   - voice_assistant.
+#   on_listening:
+#     - light.turn_on:
+#         id: status_led
+#         brightness: 100%
+#   on_end:
+#     - light.turn_off: status_led
+ 
+# Status LED
+# light:
+#   - platform: binary
+#     name: "Status LED"
+#     id: status_led
+#     output: led_output
+# output:
+#   - id: led_output
+#     platform: gpio
+#     pin: GPIO19
+#     inverted: False
+
+# binary_sensor:
+#   - platform: gpio
+#     id: push_to_talk
+#     pin:
+#       number: GPIO12
+#       mode: 
+#         input: True
+#         pullup: True
+#       inverted: True
+
+    # on_press:
+    #   - voice_assistant.start:
+    #       silence_detection: false
+    # on_release:
+    #   - voice_assistant.stop:
+# media_player:
+#   - platform: i2s_audio
+#     id: AudioKit
+#     name: Media Player
+#     dac_type: external
+#     i2s_dout_pin: 25
+#     mode: stereo
+    # on_play:
+    #   output.turn_on: gpio_amp
+    # on_idle:
+    #   output.turn_off: gpio_amp
+
+# I2S Audio
+# i2s_audio:
+#   i2s_lrclk_pin: 26
+#   i2s_bclk_pin: 27
+
+# microphone:
+#   - platform: i2s_audio
+#     adc_type: external
+#     i2s_din_pin: 35
+#     pdm: false
+#     id: mic_id
+
+# switch:
+#   # - platform: gpio
+#   #   pin: GPIO21
+#   #   name: "AMP Switch"
+#   #   restore_mode: ALWAYS_ON
+#   - platform: template
+#     name: Use Wake Word
+#     id: use_wake_word
+#     optimistic: true
+#     restore_mode: RESTORE_DEFAULT_ON
+#     on_turn_on:
+#       - lambda: id(va).set_use_wake_word(true);
+#       - if:
+#           condition:
+#             not:
+#               - voice_assistant.is_running
+#           then:
+#             - voice_assistant.start_continuous
+#       - script.execute: reset_led
+#     on_turn_off:
+#       - voice_assistant.stop
+#       - lambda: id(va).set_use_wake_word(false);
+#       - script.execute: reset_led
+
+
+
+
+# voice_assistant:
+#   id: va
+#   microphone: mic_id
+#   media_player: AudioKit
+#   use_wake_word: true
+#   on_listening:
+#     - light.turn_on:
+#         id: top_led
+#         brightness: 100%
+#         effect: pulse
+#   on_tts_start:
+#     - light.turn_on:
+#         id: top_led
+#         effect: none
+#   on_tts_end:
+#     - media_player.play_media: !lambda return x;
+#     - light.turn_on:
+#         id: top_led
+#         effect: pulse
+#   on_client_connected:
+#     - if:
+#         condition:
+#           - switch.is_on: use_wake_word
+#         then:
+#           - voice_assistant.start_continuous:
+#   on_client_disconnected:
+#     - if:
+#         condition:
+#           - switch.is_on: use_wake_word
+#         then:
+#           - voice_assistant.stop:
+#   on_end:
+#     - delay: 100ms
+#     - wait_until:
+#         not:
+#           media_player.is_playing: AudioKit
+#     - script.execute: reset_led
+#   on_error:
+#     - light.turn_on:
+#         id: top_led
+#         effect: none
+#     - delay: 1s
+#     - script.execute: reset_led
+#     - script.wait: reset_led
+#     - lambda: |-
+#         if (code == "wake-provider-missing" || code == "wake-engine-missing") {
+#           id(use_wake_word).turn_off();
+#         }
+        
+# script:
+#   - id: reset_led
+#     then:
+#        - light.turn_off: top_led
+    
+# binary_sensor:
+#   - platform: gpio
+#     pin:
+#       number: GPIO39
+#       inverted: true
+#       mode:
+#         input: true
+#     name: "Jack Status"
+
+#   - platform: gpio
+#     pin:
+#       number: GPIO036
+#       inverted: true
+#     name: "Key 1"
+#     filters:
+#       - delayed_off: 10ms
+
+#   - platform: gpio
+#     pin:
+#       number: GPIO013
+#       inverted: true
+#     name: "Key 2"
+#     filters:
+#       - delayed_off: 10ms
+
+# #  - platform: gpio
+# #    pin:
+# #      number: GPIO019
+# #      inverted: true
+# #    name: "Key 3"
+# #    filters:
+# #      - delayed_off: 10ms
+      
+#   - platform: gpio
+#     pin:
+#       number: GPIO023
+#       inverted: true
+#       mode:
+#         input: true
+#         pullup: true
+#     name: "Key 4"
+#     filters:
+#       - delayed_off: 10ms
+      
+#   - platform: gpio
+#     pin:
+#       number: GPIO018
+#       inverted: true
+#       mode:
+#         input: true
+#         pullup: true
+#     name: "Key 5"
+#     filters:
+#       - delayed_off: 10ms
+      
+  # - platform: gpio
+  #   pin: 
+  #     number: GPIO00
+  #     inverted: true
+  #     mode:
+  #       input: true
+  #       pullup: true
+  #   name: "Key 1"
+  #   filters:
+  #    - delayed_off: 10ms
+
+  #   on_press:
+  #     - voice_assistant.start:
+  #   on_release:
+  #     - voice_assistant.stop:
+  #   on_click:
+  #     - media_player.toggle:
+
+# light:
+#   - platform: binary
+#     name: "LED D4"
+#     id: top_led
+#     output: light_output_1
+#   - platform: binary
+#     name: "LED D5"
+#     output: light_output_2
+ 
+# output:
+#   - id: light_output_1
+#     platform: gpio
+#     pin: GPIO22
+#     inverted: False
+#   - id: light_output_2
+#     platform: gpio
+#     pin: GPIO19
+#     inverted: False
