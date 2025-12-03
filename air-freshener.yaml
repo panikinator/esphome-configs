@@ -7,7 +7,7 @@ substitutions:
   pre_spray_warning_seconds: "10"   # seconds before spray to start warning
   fast_flash_count: "8"             # red flashes before spray
   fast_flash_interval_ms: "200"     # ms between fast red flashes
-  spray_duration_ms: "400"          # motor on-time
+  spray_duration_ms: "350"          # motor on-time
   time_update_interval: "15"        # sensor update in seconds
   night_start: "21"                 # disable spray after this time
   night_end: "6"                    # resume spray after this time

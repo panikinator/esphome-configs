@@ -2,6 +2,8 @@
 esphome:
   name: "living-room-hub"
   friendly_name: "Living Room Hub"
+  # platformio_options:
+  #   board_build.f_cpu: 160000000L
   on_boot:
     priority: -100
     then:
@@ -207,7 +209,7 @@ time:
         - switch.turn_off: filter_relay
   - platform: homeassistant
     on_time:
-      hours: 7
+      hours: 8
       minutes: 0
       then:
         - globals.set:

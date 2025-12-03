@@ -1,0 +1,70 @@
+esphome:
+  name: desk-lighting-unit
+  friendly_name: Desk Lighting Unit
+
+esp32:
+  board: lolin_c3_mini
+  framework:
+    type: esp-idf
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: !secret default_native_api_encryption_key
+
+ota:
+  - platform: esphome
+    password: !secret default_ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Desk-Lighting-Unit Fallback AP"
+    password: !secret fallback_ap_password
+
+captive_portal:
+
+
+sensor:
+  - platform: wifi_signal
+    name: "WiFi Signal dB"
+    id: wifi_signal_db
+    update_interval: 60s
+    device_class: "signal_strength"
+    entity_category: diagnostic
+  - platform: copy
+    id: wifi_signal_percent
+    source_id: wifi_signal_db
+    name: "WiFi Signal Percent"
+    filters:
+      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
+    entity_category: diagnostic
+    unit_of_measurement: "%"
+    device_class: "signal_strength"
+  - platform: internal_temperature
+    name: "Internal Temperature"
+    update_interval: 60s
+    entity_category: diagnostic
+  - platform: uptime
+    name: "Uptime"
+    update_interval: 120s
+    entity_category: diagnostic
+    filters:
+      - lambda: return x / 3600.0;
+    unit_of_measurement: "h"
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: "IP Address"
+    ssid:
+      name: "Connected SSID"
+  - platform: version
+    name: "ESPHome Version"
+    

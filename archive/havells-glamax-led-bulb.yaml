@@ -1,0 +1,221 @@
+# Professional, feature-rich ESPHome config for Havells Glamax LED Bulb
+# Includes advanced Home Assistant integration, diagnostics, effects, and QOL improvements
+
+esphome:
+  name: havells-glamax-led-bulb
+  friendly_name: Havells Glamax Bulb
+  on_boot:
+    - priority: 600
+      then:
+        - light.turn_on:
+            id: status_light
+            brightness: 25%
+            red: 0%
+            green: 0%
+            blue: 100%
+            effect: pulse
+    - priority: -600
+      then:
+        - delay: 1s
+        - light.turn_on:
+            id: status_light
+            brightness: 25%
+            red: 0%
+            green: 100%
+            blue: 0%
+        - delay: 1000ms
+        - light.turn_off:
+            id: status_light
+
+# preferences:
+#   flash_write_interval: 10min
+
+bk72xx:
+  board: cb2l
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: !secret default_native_api_encryption_key
+  reboot_timeout: 15min
+
+ota:
+  - platform: esphome
+    password: !secret default_ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  power_save_mode: NONE
+  ap:
+    ssid: "Havells-Glamax-Led-Bulb"
+    password: !secret fallback_ap_password
+
+captive_portal:
+
+bp5758d:
+  data_pin: P7
+  clock_pin: P6
+
+output:
+  - platform: bp5758d
+    id: bp5758d_blue
+    channel: 1
+    current: 40
+    # min_power: 0.05
+    max_power: 0.40
+    # zero_means_zero: true
+  - platform: bp5758d
+    id: bp5758d_green
+    channel: 2
+    current: 40
+    # min_power: 0.05
+    max_power: 0.40
+    # zero_means_zero: true
+  - platform: bp5758d
+    id: bp5758d_red
+    channel: 3
+    current: 40
+    # min_power: 0.05
+    max_power: 0.40
+    # zero_means_zero: true
+  - platform: bp5758d
+    id: bp5758d_ww
+    channel: 4
+    current: 28
+    min_power: 0.1
+    max_power: 0.80
+    zero_means_zero: true
+  - platform: bp5758d
+    id: bp5758d_cw
+    channel: 5
+    current: 28
+    min_power: 0.1
+    max_power: 0.80
+    zero_means_zero: true
+
+light:
+  - platform: rgbww
+    id: main_light
+    name: None
+    red: bp5758d_red
+    green: bp5758d_green
+    blue: bp5758d_blue
+    cold_white: bp5758d_cw
+    warm_white: bp5758d_ww
+    cold_white_color_temperature: 6500 K
+    warm_white_color_temperature: 2700 K
+    color_interlock: true
+    default_transition_length: 800ms
+    restore_mode: RESTORE_DEFAULT_ON
+    effects:
+      - random:
+          name: "Color Loop"
+          transition_length: 4s
+          update_interval: 5s
+      - strobe:
+          name: "Strobe"
+          colors:
+            - state: true
+              brightness: 100%
+              red: 100%
+              green: 100%
+              blue: 100%
+              duration: 500ms
+            - state: false
+              duration: 250ms
+      - flicker:
+          name: "Candle Flicker"
+          alpha: 95%
+          intensity: 1.5%
+      - pulse:
+          name: "Pulse"
+          transition_length: 1s
+          update_interval: 1s
+    gamma_correct: 2.2
+  - platform: rgb
+    id: status_light
+    internal: true
+    red: bp5758d_red
+    green: bp5758d_green
+    blue: bp5758d_blue
+
+switch:
+  - platform: safe_mode
+    name: "Safe Mode"
+    entity_category: diagnostic
+
+button:
+  - platform: template
+    name: "Reading Mode"
+    icon: "mdi:book-open-page-variant"
+    on_press:
+      - light.turn_on:
+          id: main_light
+          brightness: 85%
+          color_temperature: 4000 K
+          transition_length: 1s
+  - platform: template
+    name: "Relaxation Mode"
+    icon: "mdi:sofa"
+    on_press:
+      - light.turn_on:
+          id: main_light
+          brightness: 40%
+          color_temperature: 2700 K
+          transition_length: 1.5s
+  - platform: template
+    name: "Workspace Mode"
+    icon: "mdi:desk"
+    on_press:
+      - light.turn_on:
+          id: main_light
+          brightness: 100%
+          color_temperature: 5500 K
+          transition_length: 1s
+
+sensor:
+  - platform: wifi_signal
+    name: "WiFi Signal dB"
+    id: wifi_signal_db
+    update_interval: 60s
+    device_class: "signal_strength"
+    entity_category: diagnostic
+  - platform: copy
+    id: wifi_signal_percent
+    source_id: wifi_signal_db
+    name: "WiFi Signal Percent"
+    filters:
+      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
+    entity_category: diagnostic
+    unit_of_measurement: "%"
+    device_class: "signal_strength"
+  - platform: internal_temperature
+    name: "Internal Temperature"
+    update_interval: 60s
+    entity_category: diagnostic
+  - platform: uptime
+    name: "Uptime"
+    update_interval: 120s
+    entity_category: diagnostic
+    filters:
+      - lambda: return x / 3600.0;
+    unit_of_measurement: "h"
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: "IP Address"
+    ssid:
+      name: "Connected SSID"
+  - platform: version
+    name: "ESPHome Version"
+# Optional: Expose safe_mode for recovery
+# switch:
+#   - platform: safe_mode
+#     name: "Safe Mode"
+
+# End of config

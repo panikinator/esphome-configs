@@ -1,0 +1,23 @@
+{
+    "servers": {
+        "docsmcp": {
+            "type": "stdio",
+            "command": "npx",
+            "args": [
+                "-y",
+                "docsmcp",
+                "'--source=official esphome documentation website|https://esphome.io/components'",
+                "'--source=official espressif esp32 arduino-core documentation website|https://docs.espressif.com/projects/arduino-esp32/en/latest/'",
+            ]
+        },
+        "gitmcp-esphome-docs": {
+            "url": "https://gitmcp.io/esphome/esphome-docs"
+        },
+        "gitmcp-esphome-developer-docs": {
+            "url": "https://gitmcp.io/esphome/developers.esphome.io"
+        },
+        "gitmcp-esphome-src": {
+            "url": "https://gitmcp.io/esphome/esphome"
+        }
+    }
+}

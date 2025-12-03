@@ -1,0 +1,398 @@
+substitutions:
+  name: jk-bms-ble
+  device_description: "Monitor and control a JK-BMS via BLE"
+  external_components_source: github://syssi/esphome-jk-bms@main
+  bms_mac_address: C8:47:80:42:5A:33
+  # Protocol version options: JK02_24S, JK02_32S, JK04
+  # JK02_24S: For most common JK-BMS models (up to 24 cells)
+  # JK02_32S: For newer models with 32S support (firmware v11+)
+  # JK04: For older JK-B2A16S models
+  protocol_version: JK02_32S
+
+esphome:
+  name: ${name}
+  comment: ${device_description}
+  min_version: 2024.6.0
+  project:
+    name: "syssi.esphome-jk-bms"
+    version: 2.2.0
+  platformio_options:
+    build_flags: 
+      - -DCONFIG_ARDUINO_LOOP_STACK_SIZE=32768
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+external_components:
+  - source: ${external_components_source}
+    refresh: 0s
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+logger:
+  level: DEBUG
+
+api:
+  encryption: 
+    key: !secret default_native_api_encryption_key
+
+ota:
+  - platform: esphome
+    id: my_ota
+    password: !secret default_ota_password
+    # Automatically disconnect BLE during OTA to prevent issues
+    on_begin:
+      then:
+        - switch.turn_off: ble_connection_switch
+        - logger.log: "BLE connection suspended for OTA update"
+
+# BLE tracker and client setup
+esp32_ble_tracker:
+  scan_parameters:
+    interval: 320ms
+    window: 30ms
+    active: false
+
+ble_client:
+  - mac_address: ${bms_mac_address}
+    id: bms_client
+    # Auto-connect on boot
+    auto_connect: true
+
+jk_bms_ble:
+  - id: bms0
+    ble_client_id: bms_client
+    protocol_version: ${protocol_version}
+    throttle: 5s  # Update interval
+    update_interval: 10s
+
+# ============================================================================
+# BINARY SENSORS - Status indicators
+# ============================================================================
+binary_sensor:
+  - platform: jk_bms_ble
+    jk_bms_ble_id: bms0
+    balancing:
+      name: "balancing"
+    charging:
+      name: "charging"
+    discharging:
+      name: "discharging"
+    online_status:
+      name: "online status"
+    heating:
+      name: "heating"
+    # precharging:
+    #   name: "precharging"
+
+# ============================================================================
+# SENSORS - Monitoring data
+# ============================================================================
+sensor:
+  - platform: jk_bms_ble
+    jk_bms_ble_id: bms0
+    
+    # Cell voltage monitoring
+    min_cell_voltage:
+      name: "min cell voltage"
+    max_cell_voltage:
+      name: "max cell voltage"
+    min_voltage_cell:
+      name: "min voltage cell"
+    max_voltage_cell:
+      name: "max voltage cell"
+    delta_cell_voltage:
+      name: "delta cell voltage"
+    average_cell_voltage:
+      name: "average cell voltage"
+    
+    # Individual cell voltages
+    cell_voltage_1:
+      name: "cell voltage 1"
+    cell_voltage_2:
+      name: "cell voltage 2"
+    cell_voltage_3:
+      name: "cell voltage 3"
+    cell_voltage_4:
+      name: "cell voltage 4"
+    cell_voltage_5:
+      name: "cell voltage 5"
+    cell_voltage_6:
+      name: "cell voltage 6"
+    cell_voltage_7:
+      name: "cell voltage 7"
+    cell_voltage_8:
+      name: "cell voltage 8"
+
+    
+    # Cell resistance (BLE provides this, UART doesn't!)
+    cell_resistance_1:
+      name: "cell resistance 1"
+    cell_resistance_2:
+      name: "cell resistance 2"
+    cell_resistance_3:
+      name: "cell resistance 3"
+    cell_resistance_4:
+      name: "cell resistance 4"
+    cell_resistance_5:
+      name: "cell resistance 5"
+    cell_resistance_6:
+      name: "cell resistance 6"
+    cell_resistance_7:
+      name: "cell resistance 7"
+    cell_resistance_8:
+      name: "cell resistance 8"
+
+    
+    # Temperatures
+    power_tube_temperature:
+      name: "FET temperature"
+    temperature_sensor_1:
+      name: "temperature sensor 1"
+    temperature_sensor_2:
+      name: "temperature sensor 2"
+    
+    # Electrical measurements
+    total_voltage:
+      name: "total voltage"
+    current:
+      name: "current"
+    power:
+      name: "power"
+    charging_power:
+      name: "charging power"
+    discharging_power:
+      name: "discharging power"
+    
+    # Battery status
+    capacity_remaining:
+      name: "capacity remaining"
+    # capacity_remaining_derived:
+    #   name: "capacity remaining derived"
+    total_battery_capacity_setting:
+      name: "total battery capacity setting"
+    charging_cycles:
+      name: "charging cycles"
+    total_charging_cycle_capacity:
+      name: "total charging cycle capacity"
+    state_of_charge:
+      name: "state of charge"
+    
+    # Protection settings (read-only sensors)
+    errors_bitmask:
+      name: "errors bitmask"
+    balancing_current:
+      name: "balancing current"
+    total_runtime:
+      name: "total runtime"
+    
+  # System information diagnostic sensors
+  - platform: wifi_signal
+    name: "WiFi Signal"
+    id: wifi_signal_db
+    update_interval: 60s
+    device_class: "signal_strength"
+    entity_category: diagnostic
+
+  - platform: copy
+    source_id: wifi_signal_db
+    name: "WiFi Signal Percent"
+    filters:
+      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
+    unit_of_measurement: "%"
+    device_class: "signal_strength"
+    entity_category: diagnostic
+
+  - platform: internal_temperature
+    name: "Internal Temperature"
+    entity_category: diagnostic
+    update_interval: 60s
+
+  - platform: uptime
+    name: "Uptime"
+    update_interval: 300s
+    entity_category: diagnostic
+
+# ============================================================================
+# SWITCHES - Basic on/off controls
+# ============================================================================
+switch:
+  - platform: jk_bms_ble
+    jk_bms_ble_id: bms0
+    charging:
+      name: "charging"
+    discharging:
+      name: "discharging"
+    balancer:
+      name: "balancer"
+    # Advanced switches (available in BLE!)
+    heating:
+      name: "heating"
+    disable_temperature_sensors:
+      name: "disable temperature sensors"
+    display_always_on:
+      name: "display always on"
+    smart_sleep:
+      name: "smart sleep"
+    disable_pcl_module:
+      name: "disable pcl module"
+    charging_float_mode:
+      name: "charging float mode"
+    timed_stored_data:
+      name: "timed stored data"
+
+  # BLE Connection control switch
+  - platform: ble_client
+    ble_client_id: bms_client
+    id: ble_connection_switch
+    name: "BLE Connection"
+    icon: mdi:bluetooth
+    restore_mode: RESTORE_DEFAULT_ON  # Auto-connect on boot
+
+# ============================================================================
+# NUMBER ENTITIES - Configurable BMS settings (BLE exclusive!)
+# ============================================================================
+number:
+  - platform: jk_bms_ble
+    jk_bms_ble_id: bms0
+    
+    # Battery configuration
+    total_battery_capacity:
+      name: "total battery capacity"
+      mode: box
+    cell_count:
+      name: "cell count"
+      mode: box
+    
+    # Voltage protections
+    cell_voltage_overvoltage_protection:
+      name: "cell overvoltage protection"
+      mode: box
+    cell_voltage_overvoltage_recovery:
+      name: "cell overvoltage recovery"
+      mode: box
+    cell_voltage_undervoltage_protection:
+      name: "cell undervoltage protection"
+      mode: box
+    cell_voltage_undervoltage_recovery:
+      name: "cell undervoltage recovery"
+      mode: box
+    
+    # Current limits
+    max_charge_current:
+      name: "max charge current"
+      mode: box
+    max_discharge_current:
+      name: "max discharge current"
+      mode: box
+    
+    # Balancing settings
+    balance_trigger_voltage:
+      name: "balance trigger voltage"
+      mode: box
+    balance_starting_voltage:
+      name: "balance starting voltage"
+      mode: box
+    max_balance_current:
+      name: "max balance current"
+      mode: box
+    
+    # Temperature protections
+    charge_overtemperature_protection:
+      name: "charge overtemperature protection"
+      mode: box
+    charge_overtemperature_protection_recovery:
+      name: "charge overtemperature recovery"
+      mode: box
+    discharge_overtemperature_protection:
+      name: "discharge overtemperature protection"
+      mode: box
+    discharge_overtemperature_protection_recovery:
+      name: "discharge overtemperature recovery"
+      mode: box
+    charge_undertemperature_protection:
+      name: "charge undertemperature protection"
+      mode: box
+    charge_undertemperature_protection_recovery:
+      name: "charge undertemperature recovery"
+      mode: box
+    power_tube_overtemperature_protection:
+      name: "mosfet overtemperature protection"
+      mode: box
+    power_tube_overtemperature_protection_recovery:
+      name: "mosfet overtemperature recovery"
+      mode: box
+    
+    # Protection delays
+    charge_overcurrent_protection_delay:
+      name: "charge overcurrent delay"
+      mode: box
+    charge_overcurrent_protection_recovery_time:
+      name: "charge overcurrent recovery time"
+      mode: box
+    discharge_overcurrent_protection_delay:
+      name: "discharge overcurrent delay"
+      mode: box
+    discharge_overcurrent_protection_recovery_time:
+      name: "discharge overcurrent recovery time"
+      mode: box
+    short_circuit_protection_delay:
+      name: "short circuit protection delay"
+      mode: box
+    short_circuit_protection_recovery_time:
+      name: "short circuit protection recovery time"
+      mode: box
+    
+    # Other settings
+    power_off_voltage:
+      name: "power off voltage"
+      mode: box
+
+# ============================================================================
+# TEXT SENSORS - Information displays
+# ============================================================================
+text_sensor:
+  - platform: jk_bms_ble
+    jk_bms_ble_id: bms0
+    errors:
+      name: "errors"
+    operation_status:
+      name: "operation status"
+    total_runtime_formatted:
+      name: "total runtime formatted"
+    software_version:
+      name: "software version"
+    hardware_version:
+      name: "hardware version"
+
+  # System information
+  - platform: wifi_info
+    ip_address:
+      name: "IP Address"
+      entity_category: diagnostic
+    ssid:
+      name: "Connected SSID"
+      entity_category: diagnostic
+    mac_address:
+      name: "MAC Address"
+      entity_category: diagnostic
+      
+  - platform: version
+    name: "ESPHome Version"
+    entity_category: diagnostic
+
+# ============================================================================
+# BUTTONS - Convenience actions
+# ============================================================================
+button:
+  - platform: restart
+    name: "Restart"
+    entity_category: diagnostic
+    
+  - platform: safe_mode
+    name: "Safe Mode"
+    entity_category: diagnostic

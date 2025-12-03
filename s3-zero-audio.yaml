@@ -1,0 +1,148 @@
+esphome:
+  name: s3-zero-audio
+  friendly_name: s3-zero-audio
+  # platformio_options:
+  #     build_flags:
+  #       - -DARDUINO_USB_CDC_ON_BOOT=true -DBOARD_HAS_PSRAM
+  platformio_options:
+    build_flags: "-DBOARD_HAS_PSRAM"
+    board_build.arduino.memory_type: qio_opi
+
+esp32:
+  board: esp32-s3-devkitc-1
+  flash_size: 16MB
+  cpu_frequency: 240MHz
+  variant: ESP32S3
+  framework:
+    type: arduino
+    version: latest
+
+# Enable logging
+logger:
+  hardware_uart: UART0 # Use UART0 for logging instead of the default USB_CDC
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+api:
+  encryption:
+    key: !secret default_native_api_encryption_key
+
+ota:
+  platform: esphome
+  password: !secret default_ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  power_save_mode: NONE
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "S3-Zero-Audio Fallback Hotspot"
+    password: !secret fallback_ap_password
+
+captive_portal:
+
+# Status LED
+light:
+  - platform: neopixelbus
+    variant: ws2812
+    internal: True
+    pin: GPIO21
+    num_leds: 1
+    id: onboard_led
+    name: "Status LED"
+    effects:
+      - pulse:
+      - random:
+
+# I2S Audio Component - Using available GPIO pins
+i2s_audio:
+  - id: i2s_audio_bus
+    i2s_lrclk_pin: GPIO41 # Word Select (WS/LRCLK)
+    i2s_bclk_pin: GPIO42 # Bit Clock (BCK/BCLK)
+    
+
+# Media Player Component
+media_player:
+  - platform: i2s_audio
+    name: "ESP32-S3-Zero Audio Player"
+    id: waveshare_audio_player
+    dac_type: external
+    i2s_dout_pin: GPIO4 # Data Out (DIN) - Available on ESP32-S3-Zero
+    i2s_audio_id: i2s_audio_bus
+    mode: stereo
+    i2s_comm_fmt: msb
+    # Visual feedback using onboard LED
+    on_play:
+      then:
+        - light.turn_off:
+            id: onboard_led
+        - light.turn_on:
+            id: onboard_led
+            brightness: 50%
+            red: 0%
+            green: 100%
+            blue: 0%
+    on_idle:
+      then:
+        - light.turn_off:
+            id: onboard_led
+        - light.turn_on:
+            id: onboard_led
+            brightness: 50%
+            red: 0%
+            green: 0%
+            blue: 100%
+
+    on_pause:
+      then:
+        - light.turn_off:
+            id: onboard_led
+        - light.turn_on:
+            id: onboard_led
+            brightness: 100%
+            red: 0%
+            green: 100%
+            blue: 0%
+            effect: pulse
+
+# System information diagnostic sensors
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: "IP Address"
+    ssid:
+      name: "Connected SSID"
+  - platform: version
+    name: "ESPHome Version"
+
+sensor:
+  - platform: wifi_signal
+    name: "WiFi Signal Sensor"
+    id: wifi_signal_db
+    update_interval: 60s
+    device_class: "signal_strength"
+    entity_category: diagnostic
+
+  - platform: copy # Reports the WiFi signal strength in %
+    source_id: wifi_signal_db
+    name: "WiFi Signal Percent"
+    filters:
+      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
+    unit_of_measurement: "%"
+    device_class: "signal_strength"
+    entity_category: diagnostic
+
+  - platform: internal_temperature
+    internal: False
+    update_interval: 60s
+    name: "Internal Temperature"
+    entity_category: diagnostic
+
+  - platform: uptime
+    name: "Uptime"
+    update_interval: 120s
+    entity_category: diagnostic
