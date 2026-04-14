@@ -1,23 +1,40 @@
 substitutions:
   name: esp32-bluetooth-proxy
   friendly_name: ESP32 Bluetooth Proxy
-packages:
-  esphome.bluetooth-proxy: github://esphome/bluetooth-proxies/esp32-generic/esp32-generic.yaml@main
+esp32:
+  variant: ESP32
+  framework: 
+    type: esp-idf
+    advanced: 
+      minimum_chip_revision: "3.0"
+  
+
 esphome:
   name: ${name}
   name_add_mac_suffix: false
   friendly_name: ${friendly_name}
+  
 api:
   encryption:
     key: !secret default_native_api_encryption_key
+  homeassistant_services: True
+
+external_components:
+  # use ble_client_hid from this master branch in GitHub
+  - source: github://fsievers22/esphome-ble-remote@master
+    components: [ ble_client_hid ]
 
 ota:
   - platform: esphome
     password: !secret default_ota_password
 
 wifi:
-  ssid: !secret wifi_ssid
-  password: !secret wifi_password
+  networks:
+  - ssid: !secret wifi_ssid
+    password: !secret wifi_password
+  - ssid: !secret wifi_alt_ssid
+    password: !secret wifi_alt_password
+    priority: 32
 
   # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
@@ -26,7 +43,50 @@ wifi:
 
 captive_portal:
 
+logger:
+  level: INFO
+
+esp32_ble_tracker:
+  scan_parameters:
+    # We currently use the defaults to ensure Bluetooth
+    # can co-exist with WiFi In the future we may be able to
+    # enable the built-in coexistence logic in ESP-IDF
+    active: true
+
+bluetooth_proxy:
+  active: true
+  # connection_slots: 3
+
+
+# BLE HID
+
+esp32_ble:
+  max_connections: 5
+
+ble_client:
+  - id: ble_client_1
+    mac_address: "2A:07:98:E9:78:B9"    #modify to fit your ble device
+  
+
+ble_client_hid:
+  - id: ble_client_hid_1
+    ble_client_id: ble_client_1
+
+
+
 sensor:
+  - platform: ble_client_hid
+    type: battery
+    ble_client_hid_id: ble_client_hid_1
+    name: "Battery"
+    entity_category: diagnostic
+  - platform: ble_client_hid
+    type: last_event_value
+    ble_client_hid_id: ble_client_hid_1
+    name: "Last Event Value"
+    entity_category: diagnostic
+
+  # common
   - platform: wifi_signal
     name: "WiFi Signal dB"
     id: wifi_signal_db
@@ -53,12 +113,3 @@ sensor:
     filters:
       - lambda: return x / 3600.0;
     unit_of_measurement: "h"
-
-text_sensor:
-  - platform: wifi_info
-    ip_address:
-      name: "IP Address"
-    ssid:
-      name: "Connected SSID"
-  - platform: version
-    name: "ESPHome Version"

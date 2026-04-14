@@ -1,0 +1,32 @@
+esphome:
+  name: halogen-heater
+  friendly_name: halogen-heater
+
+esp32:
+  board: esp32-c3-devkitm-1
+  framework:
+    type: esp-idf
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "ZfodtIjpslQlJPPk2k23wyy9XO57rp3+dDnzu6Fm0fQ="
+
+ota:
+  - platform: esphome
+    password: "5dde1dd834e99d01b53ca18350ec9d22"
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Halogen-Heater Fallback Hotspot"
+    password: "DAf8Sc2ZhTf6"
+
+captive_portal:
+    
