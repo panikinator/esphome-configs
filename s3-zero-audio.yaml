@@ -6,7 +6,7 @@ substitutions:
 esphome:
   name: s3-zero-audio
   friendly_name: S3Z audio
-  build_path: /tmp/esphome_remote_build
+  # build_path: /tmp/esphome_remote_build
   # platformio_options:
   #     build_flags:
   #       - -DARDUINO_USB_CDC_ON_BOOT=true -DBOARD_HAS_PSRAM
@@ -35,6 +35,10 @@ esp32:
         # CONFIG_BT_BLE_DYNAMIC_ENV_MEMORY: "y"
 
         # CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC: "y"
+
+        # CONFIG_SPIRAM_USE_MALLOC: "y"
+        # CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL: "4096"
+        # CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY: "y"
 
 # Broken VAD!
 # external_components:
@@ -163,7 +167,7 @@ media_player:
     name: "Speaker Media Player"
     id: speaker_media_player_id
     # task_stack_in_psram: True
-    volume_initial: 70%
+    volume_initial: 60%
     media_pipeline:
         speaker: media_spk_resampling_input
         num_channels: 2
@@ -181,11 +185,21 @@ media_player:
     on_pause: 
       then:
         - script.execute: start_wake_word
-        - script.execute: reset_led
+        - light.turn_on:
+            id: led
+            red: 100%
+            green: 100%
+            blue: 0%
+            brightness: 50% 
     on_play:
       then:
         - script.execute: stop_wake_word
-        - script.execute: reset_led
+        - light.turn_on:
+            id: led
+            red: 0%
+            green: 100%
+            blue: 0%
+            brightness: 50%
     on_idle:
       then:
         - script.execute: start_wake_word
@@ -202,7 +216,7 @@ voice_assistant:
   media_player: speaker_media_player_id
   noise_suppression_level: 2
   auto_gain: 28dBFS
-  volume_multiplier: 2
+  volume_multiplier: 1
 
   on_listening:
     - light.turn_on:
@@ -224,18 +238,19 @@ voice_assistant:
     - light.turn_on:
         id: led
         blue: 100%
-        red: 0%
-        green: 0%
+        red: 100%
+        green: 100%
         brightness: 100%
-        effect: none
+        effect: "Slow Pulse"
   on_end:
     # Handle the "nevermind" case where there is no announcement
+    # This wait_until prevents the second one to be immediately true if execution reaches here before the media player state is updated to playing
     - wait_until:
         condition:
           - media_player.is_announcing:
-        timeout: 15s
-    # Restart only mWW if enabled; streaming wake words automatically restart
+        timeout: 10s
     
+    # Wait for announcemment to finish
     - wait_until:
         - and:
             - not:
@@ -245,7 +260,7 @@ voice_assistant:
                   id: external_i2s_speaker
     
     - script.execute: start_wake_word
-    - script.execute: reset_led 
+    - script.execute: reset_led
   
   on_error:
     - script.execute: play_error_cue
@@ -395,73 +410,23 @@ script:
             - light.turn_on:
                 id: led
                 red: 100%
-                green: 89%
-                blue: 71%
-                brightness: 60%
+                green: 100%
+                blue: 65%
+                brightness: 50%
                 effect: none
           else:
-            - if:
-                condition:
-                  - media_player.is_idle
-                then:
-                  - light.turn_on:
-                      id: led
-                      red: 0%
-                      green: 100%
-                      blue: 100%
-                      brightness: 60%
-                      effect: none
-                  - script.stop: reset_led
-            - if:
-                condition:
-                  - media_player.is_playing
-                then:
-                  - light.turn_off:
-                      id: led
-                  - light.turn_on:
-                      id: led
-                      brightness: 50%
-                      red: 0%
-                      green: 100%
-                      blue: 0%
-                  - script.stop: reset_led
-            - if:
-                condition:
-                  - media_player.is_paused
-                then:
-                  - light.turn_off:
-                      id: led
-                  - light.turn_on:
-                      id: led
-                      brightness: 50%
-                      red: 100%
-                      green: 100%
-                      blue: 0%
-                  - script.stop: reset_led
-            - if:
-                condition:
-                  - media_player.is_announcing
-                then:
-                  - light.turn_off:
-                      id: led
-                  - light.turn_on:
-                      id: led
-                      brightness: 50%
-                      red: 50%
-                      green: 100%
-                      blue: 100%
-                      effect: pulse
-                  - script.stop: reset_led
-            - light.turn_off: led
+            - light.turn_on:
+                id: led
+                red: 0%
+                green: 100%
+                blue: 100%
+                brightness: 60%
+                effect: none
+            
 
   - id: start_wake_word
     then:
-      - if:
-          condition:
-            - not:
-                voice_assistant.is_running
-          then:
-            - micro_wake_word.start:
+      - micro_wake_word.start:
 
   - id: stop_wake_word
     then:
