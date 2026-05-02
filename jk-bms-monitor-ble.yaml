@@ -19,7 +19,7 @@ esphome:
   min_version: 2024.6.0
   project:
     name: "syssi.esphome-jk-bms"
-    version: 2.3.0
+    version: 2.4.0
   platformio_options:
     build_flags: 
       - -DCONFIG_ARDUINO_LOOP_STACK_SIZE=32768
@@ -39,6 +39,7 @@ external_components:
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
+  min_auth_mode: WPA2
   on_disconnect: 
     then:
       - switch.turn_off: ble_connection_switch
@@ -91,17 +92,16 @@ binary_sensor:
     jk_bms_ble_id: bms0
     balancing:
       name: "balancing"
-      entity_category: diagnostic
-    # charging:
-    #   name: "charging"
-    # discharging:
-    #   name: "discharging"
-    # online_status:
-    #   name: "online status"
-    # heating:
-    #   name: "heating"
-    # precharging:
-    #   name: "precharging"
+      #entity_category: diagnostic
+    charging:
+      name: "charging"
+    discharging:
+      name: "discharging"
+    online_status:
+      name: "online status"
+    heating:
+      name: "heating"
+
 
 # ============================================================================
 # SENSORS - Monitoring data
@@ -113,16 +113,16 @@ sensor:
     # Cell voltage monitoring
     min_cell_voltage:
       name: "min cell voltage"
-      entity_category: diagnostic
+      #entity_category: diagnostic
     max_cell_voltage:
       name: "max cell voltage"
-      entity_category: diagnostic
+      #entity_category: diagnostic
     min_voltage_cell:
       name: "min voltage cell"
-      entity_category: diagnostic
+      #entity_category: diagnostic
     max_voltage_cell:
       name: "max voltage cell"
-      entity_category: diagnostic
+      #entity_category: diagnostic
     delta_cell_voltage:
       name: "delta cell voltage"
     average_cell_voltage:
@@ -131,55 +131,55 @@ sensor:
     # Individual cell voltages
     cell_voltage_1:
       name: "cell voltage 1"
-      entity_category: diagnostic
+      #entity_category: diagnostic
     cell_voltage_2:
       name: "cell voltage 2"
-      entity_category: diagnostic
+      #entity_category: diagnostic
     cell_voltage_3:
       name: "cell voltage 3"
-      entity_category: diagnostic
+      #entity_category: diagnostic
     cell_voltage_4:
       name: "cell voltage 4"
-      entity_category: diagnostic
+      #entity_category: diagnostic
     cell_voltage_5:
       name: "cell voltage 5"
-      entity_category: diagnostic
+      #entity_category: diagnostic
     cell_voltage_6:
       name: "cell voltage 6"
-      entity_category: diagnostic
+      #entity_category: diagnostic
     cell_voltage_7:
       name: "cell voltage 7"
-      entity_category: diagnostic
+      #entity_category: diagnostic
     cell_voltage_8:
       name: "cell voltage 8"
-      entity_category: diagnostic
+      #entity_category: diagnostic
 
     
     # Cell resistance (BLE provides this, UART doesn't!)
     cell_resistance_1:
       name: "cell resistance 1"
-      entity_category: diagnostic
+      #entity_category: diagnostic
     cell_resistance_2:
       name: "cell resistance 2"
-      entity_category: diagnostic
+      #entity_category: diagnostic
     cell_resistance_3:
       name: "cell resistance 3"
-      entity_category: diagnostic
+      #entity_category: diagnostic
     cell_resistance_4:
       name: "cell resistance 4"
-      entity_category: diagnostic
+      #entity_category: diagnostic
     cell_resistance_5:
       name: "cell resistance 5"
-      entity_category: diagnostic
+      #entity_category: diagnostic
     cell_resistance_6:
       name: "cell resistance 6"
-      entity_category: diagnostic
+      #entity_category: diagnostic
     cell_resistance_7:
       name: "cell resistance 7"
-      entity_category: diagnostic
+      #entity_category: diagnostic
     cell_resistance_8:
       name: "cell resistance 8"
-      entity_category: diagnostic
+      #entity_category: diagnostic
       
 
     
@@ -210,18 +210,16 @@ sensor:
     capacity_remaining:
       name: "capacity remaining"
       id: capacity_remaining_ah
-    # capacity_remaining_derived:
-    #   name: "capacity remaining derived"
     total_battery_capacity_setting:
       name: "total battery capacity setting"
-      entity_category: diagnostic
+      #entity_category: diagnostic
       id: capacity_setting_ah
     charging_cycles:
       name: "charging cycles"
-      entity_category: diagnostic
+      #entity_category: diagnostic
     total_charging_cycle_capacity:
       name: "total charging cycle capacity"
-      entity_category: diagnostic
+      #entity_category: diagnostic
     state_of_charge:
       name: "state of charge"
       id: soc_percent
@@ -229,13 +227,13 @@ sensor:
     # Protection settings (read-only sensors)
     errors_bitmask:
       name: "errors bitmask"
-      entity_category: diagnostic
+      #entity_category: diagnostic
     balancing_current:
       name: "balancing current"
-      entity_category: diagnostic
+      #entity_category: diagnostic
     total_runtime:
       name: "total runtime"
-      entity_category: diagnostic
+      #entity_category: diagnostic
     
   # System information diagnostic sensors
   - platform: wifi_signal
@@ -369,22 +367,22 @@ switch:
     #   name: "heating"
     disable_temperature_sensors:
       name: "disable temperature sensors"
-      entity_category: diagnostic
+      #entity_category: diagnostic
     display_always_on:
       name: "display always on"
-      entity_category: diagnostic
+      #entity_category: diagnostic
     smart_sleep:
       name: "smart sleep"
-      entity_category: diagnostic
+      #entity_category: diagnostic
     disable_pcl_module:
       name: "disable pcl module"
-      entity_category: diagnostic
+      #entity_category: diagnostic
     charging_float_mode:
       name: "charging float mode"
-      entity_category: diagnostic
+      #entity_category: diagnostic
     timed_stored_data:
       name: "timed stored data"
-      entity_category: diagnostic
+      #entity_category: diagnostic
 
   # BLE Connection control switch
   - platform: ble_client
@@ -408,115 +406,115 @@ number:
     cell_count:
       name: "cell count"
       mode: box
-      entity_category: diagnostic
+      #entity_category: diagnostic
     
     # Voltage protections
     cell_voltage_overvoltage_protection:
       name: "cell overvoltage protection"
       mode: box
-      entity_category: diagnostic
+      #entity_category: diagnostic
     cell_voltage_overvoltage_recovery:
       name: "cell overvoltage recovery"
       mode: box
-      entity_category: diagnostic
+      #entity_category: diagnostic
     cell_voltage_undervoltage_protection:
       name: "cell undervoltage protection"
       mode: box
-      entity_category: diagnostic
+      #entity_category: diagnostic
     cell_voltage_undervoltage_recovery:
       name: "cell undervoltage recovery"
       mode: box
-      entity_category: diagnostic
+      #entity_category: diagnostic
 
     # Current limits
     max_charge_current:
       name: "max charge current"
       mode: box
-      entity_category: diagnostic
+      #entity_category: diagnostic
     max_discharge_current:
       name: "max discharge current"
       mode: box
-      entity_category: diagnostic
+      #entity_category: diagnostic
     
     # Balancing settings
     balance_trigger_voltage:
       name: "balance trigger voltage"
       mode: box
-      entity_category: diagnostic
+      #entity_category: diagnostic
     balance_starting_voltage:
       name: "balance starting voltage"
       mode: box
-      entity_category: diagnostic
+      #entity_category: diagnostic
     max_balance_current:
       name: "max balance current"
       mode: box
-      entity_category: diagnostic
+      #entity_category: diagnostic
     
     # Temperature protections
     charge_overtemperature_protection:
       name: "charge overtemperature protection"
       mode: box
-      entity_category: diagnostic
+      #entity_category: diagnostic
     charge_overtemperature_protection_recovery:
       name: "charge overtemperature recovery"
       mode: box
-      entity_category: diagnostic
+      #entity_category: diagnostic
     discharge_overtemperature_protection:
       name: "discharge overtemperature protection"
       mode: box
-      entity_category: diagnostic
+      #entity_category: diagnostic
     discharge_overtemperature_protection_recovery:
       name: "discharge overtemperature recovery"
       mode: box
-      entity_category: diagnostic
+      #entity_category: diagnostic
     charge_undertemperature_protection:
       name: "charge undertemperature protection"
       mode: box
-      entity_category: diagnostic
+      #entity_category: diagnostic
     charge_undertemperature_protection_recovery:
       name: "charge undertemperature recovery"
       mode: box
-      entity_category: diagnostic
+      #entity_category: diagnostic
     power_tube_overtemperature_protection:
       name: "mosfet overtemperature protection"
       mode: box
-      entity_category: diagnostic
+      #entity_category: diagnostic
     power_tube_overtemperature_protection_recovery:
       name: "mosfet overtemperature recovery"
       mode: box
-      entity_category: diagnostic
+      #entity_category: diagnostic
 
     # Protection delays
     charge_overcurrent_protection_delay:
       name: "charge overcurrent delay"
       mode: box
-      entity_category: diagnostic
+      #entity_category: diagnostic
     charge_overcurrent_protection_recovery_time:
       name: "charge overcurrent recovery time"
       mode: box
-      entity_category: diagnostic
+      #entity_category: diagnostic
     discharge_overcurrent_protection_delay:
       name: "discharge overcurrent delay"
       mode: box
-      entity_category: diagnostic
+      #entity_category: diagnostic
     discharge_overcurrent_protection_recovery_time:
       name: "discharge overcurrent recovery time"
       mode: box
-      entity_category: diagnostic
+      #entity_category: diagnostic
     short_circuit_protection_delay:
       name: "short circuit protection delay"
       mode: box
-      entity_category: diagnostic
+      #entity_category: diagnostic
     short_circuit_protection_recovery_time:
       name: "short circuit protection recovery time"
       mode: box
-      entity_category: diagnostic
+      #entity_category: diagnostic
 
     # Other settings
     power_off_voltage:
       name: "power off voltage"
       mode: box
-      entity_category: diagnostic
+      #entity_category: diagnostic
 
 # ============================================================================
 # TEXT SENSORS - Information displays
@@ -526,19 +524,19 @@ text_sensor:
     jk_bms_ble_id: bms0
     errors:
       name: "errors"
-      entity_category: diagnostic
+      #entity_category: diagnostic
     operation_status:
       name: "operation status"
-      entity_category: diagnostic
+      #entity_category: diagnostic
     total_runtime_formatted:
       name: "total runtime formatted"
-      entity_category: diagnostic
+      #entity_category: diagnostic
     software_version:
       name: "software version"
-      entity_category: diagnostic
+      #entity_category: diagnostic
     hardware_version:
       name: "hardware version"
-      entity_category: diagnostic
+      #entity_category: diagnostic
 
   # System information
   - platform: wifi_info
