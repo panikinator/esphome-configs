@@ -1,0 +1,319 @@
+substitutions:
+  device_name: "esp32-c3-fan-dimmer"
+  friendly_name: "Ceiling Fan Dimmer"
+  gate_pin: GPIO7
+  zero_cross_pin: GPIO4
+  ring_pin: GPIO5
+  encoder_pin_a: GPIO3
+  encoder_pin_b: GPIO1
+  encoder_btn_pin: GPIO0
+  ring_led_count: "8"
+  ring_brightness: "25%"
+  ring_color_low_r: "0%"
+  ring_color_low_g: "75%"
+  ring_color_low_b: "10%"
+  ring_color_normal_r: "90%"
+  ring_color_normal_g: "60%"
+  ring_color_normal_b: "20%"
+  ring_color_high_r: "80%"
+  ring_color_high_g: "70%"
+  ring_color_high_b: "0%"
+  fan_speed_count: "10"
+  min_power: "0.30"
+  max_power: "1.0"
+  gate_enable_time: "100"
+  speed_curve_exponent: "0.5"
+
+external_components:
+  - source: external_components
+    components: [ ac_dimmer ]
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+  on_boot:
+    priority: 550
+    then:
+      - script.execute: sync_ui
+
+esp32:
+  board: esp32-c3-devkitm-1
+  framework:
+    type: esp-idf
+    version: recommended
+
+logger:
+  level: INFO
+
+api:
+  reboot_timeout: 0s
+  encryption:
+    key: !secret default_native_api_encryption_key
+
+ota:
+  - platform: esphome
+    id: my_ota
+    password: !secret default_ota_password
+
+wifi:
+  output_power: 8.5db
+  reboot_timeout: 0s
+  power_save_mode: NONE
+  min_auth_mode: WPA2
+  networks:
+  - ssid: !secret wifi_ssid
+    password: !secret wifi_password
+  - ssid: !secret wifi_alt_ssid
+    password: !secret wifi_alt_password
+    priority: 64
+  ap:
+    ssid: "Fan Dimmer Fallback Hotspot"
+    password: !secret fallback_ap_password
+
+captive_portal:
+
+globals:
+  - id: fan_level
+    type: int
+    restore_value: true
+    initial_value: "0"
+  - id: last_nonzero_speed
+    type: int
+    restore_value: true
+    initial_value: "1"
+
+output:
+  - platform: template
+    id: fan_curve
+    type: float
+    write_action:
+      - output.set_level:
+          id: fan_dimmer
+          level: !lambda |-
+            if (state <= 0.0f) return 0.0f;
+            float x = powf(state, ${speed_curve_exponent});
+            return (1.0f - cosf(3.141592653589793f * x)) / 2.0f;
+  - platform: ac_dimmer
+    id: fan_dimmer
+    gate_pin: ${gate_pin}
+    zero_cross_pin:
+      number: ${zero_cross_pin}
+      mode:
+        input: true
+      inverted: false
+    method: leading pulse
+    gate_enable_time: ${gate_enable_time}
+    min_power: ${min_power}
+    max_power: ${max_power}
+
+fan:
+  - platform: speed
+    id: ceiling_fan
+    name: "Ceiling Fan"
+    output: fan_curve
+    speed_count: ${fan_speed_count}
+    restore_mode: RESTORE_DEFAULT_OFF
+    on_state:
+      then:
+        - lambda: |-
+            int speed = x->state ? x->speed : 0;
+            id(fan_level) = speed;
+            if (speed > 0) id(last_nonzero_speed) = speed;
+        - script.execute: sync_ui
+
+sensor:
+  - platform: rotary_encoder
+    id: fan_encoder
+    internal: true
+    pin_a:
+      number: ${encoder_pin_a}
+      mode:
+        input: true
+        pullup: true
+    pin_b:
+      number: ${encoder_pin_b}
+      mode:
+        input: true
+        pullup: true
+    min_value: 0
+    max_value: ${fan_speed_count}
+    resolution: 1
+    publish_initial_value: true
+    on_clockwise:
+      then:
+        - lambda: |-
+            if (id(fan_level) < ${fan_speed_count}) {
+              id(fan_level) += 1;
+            }
+        - logger.log: "Clockwise turn detected, increasing fan level"
+        - script.execute: apply_fan_level
+    on_anticlockwise:
+      then:
+        - lambda: |-
+            if (id(fan_level) > 0) {
+              id(fan_level) -= 1;
+            }
+        - logger.log: "Anticlockwise turn detected, decreasing fan level"
+        - script.execute: apply_fan_level
+
+  - platform: wifi_signal
+    name: "WiFi Signal dB"
+    id: wifi_signal_db
+    update_interval: 60s
+    device_class: signal_strength
+    entity_category: diagnostic
+
+  - platform: copy
+    name: "WiFi Signal Percent"
+    source_id: wifi_signal_db
+    filters:
+      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
+    unit_of_measurement: "%"
+    device_class: signal_strength
+    entity_category: diagnostic
+
+  - platform: internal_temperature
+    name: "Internal Temperature"
+    update_interval: 60s
+    entity_category: diagnostic
+
+  - platform: uptime
+    name: "Uptime"
+    update_interval: 120s
+    entity_category: diagnostic
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: "IP Address"
+    ssid:
+      name: "Connected SSID"
+  - platform: version
+    name: "ESPHome Version"
+button:
+  - platform: restart
+    name: "Restart"
+    entity_category: diagnostic
+    
+  - platform: safe_mode
+    name: "Safe Mode"
+    entity_category: diagnostic
+binary_sensor:
+  - platform: gpio
+    id: encoder_button
+    internal: true
+    pin:
+      number: ${encoder_btn_pin}
+      mode:
+        input: true
+        pullup: true
+    filters:
+      - delayed_on_off: 20ms
+    on_press:
+      then:
+        - script.execute: toggle_fan
+
+light:
+  - platform: esp32_rmt_led_strip
+    id: ring_leds
+    internal: true
+    pin: ${ring_pin}
+    num_leds: ${ring_led_count}
+    chipset: WS2812
+    rgb_order: GRB
+    default_transition_length: 0s
+    
+
+script:
+  - id: toggle_fan
+    mode: restart
+    then:
+      - lambda: |-
+          if (id(fan_level) == 0) {
+            int speed = id(last_nonzero_speed);
+            if (speed < 1) speed = 1;
+            if (speed > ${fan_speed_count}) speed = ${fan_speed_count};
+            id(fan_level) = speed;
+          } else {
+            id(fan_level) = 0;
+          }
+      - script.execute: apply_fan_level
+
+  - id: apply_fan_level
+    mode: restart
+    then:
+      - if:
+          condition:
+            lambda: return id(fan_level) == 0;
+          then:
+            - fan.turn_off: ceiling_fan
+          else:
+            - fan.turn_on:
+                id: ceiling_fan
+                speed: !lambda "return id(fan_level);"
+
+  - id: sync_ui
+    mode: restart
+    then:
+      - sensor.rotary_encoder.set_value:
+          id: fan_encoder
+          value: !lambda "return id(fan_level);"
+      - script.execute: update_ring
+
+  - id: update_ring
+    mode: restart
+    then:
+      - if:
+          condition:
+            lambda: return id(fan_level) == 0;
+          then:
+            - light.turn_off: ring_leds
+          else:
+            - light.turn_on:
+                id: ring_leds
+                transition_length: 0s
+                brightness: 100%
+                red: 0%
+                green: 0%
+                blue: 0%
+            - light.addressable_set:
+                id: ring_leds
+                range_from: 0
+                range_to: !lambda "return ${ring_led_count} - 1;"
+                red: 0%
+                green: 0%
+                blue: 0%
+            - if:
+                condition:
+                  lambda: return id(fan_level) == 1;
+                then:
+                  - light.addressable_set:
+                      id: ring_leds
+                      range_from: 0
+                      range_to: !lambda "return ${ring_led_count} - 1;"
+                      color_brightness: ${ring_brightness}
+                      red: ${ring_color_low_r}
+                      green: ${ring_color_low_g}
+                      blue: ${ring_color_low_b}
+                else:
+                  - if:
+                      condition:
+                        lambda: return id(fan_level) >= ${fan_speed_count};
+                      then:
+                        - light.addressable_set:
+                            id: ring_leds
+                            range_from: 0
+                            range_to: !lambda "return ${ring_led_count} - 1;"
+                            color_brightness: ${ring_brightness}
+                            red: ${ring_color_high_r}
+                            green: ${ring_color_high_g}
+                            blue: ${ring_color_high_b}
+                      else:
+                        - light.addressable_set:
+                            id: ring_leds
+                            range_from: 0
+                            range_to: !lambda "return id(fan_level) - 2;"
+                            color_brightness: ${ring_brightness}
+                            red: ${ring_color_normal_r}
+                            green: ${ring_color_normal_g}
+                            blue: ${ring_color_normal_b}

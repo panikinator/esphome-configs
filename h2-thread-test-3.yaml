@@ -1,0 +1,86 @@
+esphome:
+  name: h2-thread-test-3
+  friendly_name: h2-thread-test-3
+
+esp32:
+  board: esp32-h2-devkitm-1
+  cpu_frequency: 96MHz
+  framework:
+    type: esp-idf
+
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: !secret default_native_api_encryption_key
+
+ota:
+  - platform: esphome
+    password: !secret default_ota_password
+# Example OpenThread component configuration
+network:
+  enable_ipv6: true 
+
+openthread:
+  device_type: FTD
+  force_dataset: true
+  tlv: !secret thread_dataset_tlv
+
+output:
+  - platform: ledc
+    id: led_pin
+    pin: 11
+
+light:
+  - platform: monochromatic
+    output: led_pin
+    name: H2-LED
+  - platform: esp32_rmt_led_strip
+    id: inbuilt_ws2812
+    name: H2-RGB
+    num_leds: 1
+    pin: 8
+    rgb_order: GRB
+    chipset: WS2812
+
+
+# Example configuration entry
+text_sensor:
+  - platform: openthread_info
+    ip_address:
+      name: "Thread IP Address"
+    channel:
+      name: "Thread Channel"
+    role:
+      name: "Thread Device Role"
+    rloc16:
+      name: "Thread RLOC16"
+    ext_addr:
+      name: "Thread Extended Address"
+    eui64:
+      name: "Thread EUI64"
+    network_name:
+      name: "Thread Network Name"
+    network_key:
+      name: "Thread Network Key"
+    pan_id:
+      name: "Thread PAN ID"
+    ext_pan_id:
+      name: "Thread Extended PAN ID"
+
+sensor:
+    # common
+  - platform: internal_temperature
+    name: "Internal Temperature"
+    update_interval: 60s
+    entity_category: diagnostic
+  - platform: uptime
+    name: "Uptime"
+    update_interval: 300s
+    entity_category: diagnostic
+    filters:
+      - lambda: return x / 60.0;
+    unit_of_measurement: "m"

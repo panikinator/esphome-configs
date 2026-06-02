@@ -1,0 +1,372 @@
+substitutions:
+  name: esp32-c3-filament-dryer
+  device_description: "3D Print Filament Dryer Box"
+  heater_pin: GPIO7
+  fan_pin: GPIO10
+  ds18b20_pin: GPIO1
+  i2c_sda: GPIO5
+  i2c_scl: GPIO6
+  oled_address: "0x3C"
+  heatsink_fan_threshold: 50.0
+  heatsink_overheat_threshold: 85.0
+  oled_contrast: "50%"
+
+esphome:
+  name: ${name}
+  friendly_name: Filament Dryer
+  comment: ${device_description}
+  min_version: 2024.6.0
+  project:
+    name: "custom.filament-dryer"
+    version: "1.0.0"
+
+esp32:
+  board: esp32-c3-devkitm-1
+  variant: ESP32C3
+  framework:
+    type: esp-idf
+
+wifi:
+  networks:
+    - ssid: !secret wifi_ssid
+      password: !secret wifi_password
+    - ssid: !secret wifi_alt_ssid
+      password: !secret wifi_alt_password
+      priority: 32
+  ap:
+    ssid: "Filament Dryer Fallback"
+    password: !secret fallback_ap_password
+
+captive_portal:
+
+logger:
+  level: INFO
+
+api:
+  encryption:
+    key: !secret default_native_api_encryption_key
+
+ota:
+  - platform: esphome
+    password: !secret default_ota_password
+
+# GLOBALS
+globals:
+  - id: heater_level
+    type: float
+    restore_value: false
+    initial_value: '0.0'
+  - id: overheat_active
+    type: bool
+    restore_value: false
+    initial_value: 'false'
+
+# I2C BUS — Shared by OLED (0x3C) and AHT25 (0x38)
+# ESP32-C3 has only one hardware I2C controller — both devices must share GPIO5/6
+i2c:
+  sda: ${i2c_sda}
+  scl: ${i2c_scl}
+  frequency: 400kHz
+
+# ONE-WIRE BUS
+one_wire:
+  - platform: gpio
+    pin: ${ds18b20_pin}
+    id: one_wire_bus
+
+# FONTS
+font:
+  - file: "gfonts://Roboto Condensed"
+    id: font_small
+    size: 10
+    glyphs: '!"#$%&''()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~°'
+  - file: "gfonts://Roboto Condensed"
+    id: font_large
+    size: 14
+    glyphs: '!"#$%&''()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~°'
+  - file: "gfonts://Material+Symbols+Outlined"
+    id: icon_font
+    size: 13
+    glyphs:
+      - "\U0000f87e"   # humidity_percentage
+
+# SENSORS
+sensor:
+  # DS18B20 on heatsink
+  - platform: dallas_temp
+    one_wire_id: one_wire_bus
+    address: 0x4d6f6bd446041f28
+    name: "Heatsink Temperature"
+    id: heatsink_temp
+    update_interval: 5s
+    unit_of_measurement: "°C"
+    device_class: temperature
+    on_value:
+      then:
+        # Fan control with hysteresis
+        - if:
+            condition:
+              lambda: 'return x > ${heatsink_fan_threshold};'
+            then:
+              - switch.turn_on: fan_switch
+        - if:
+            condition:
+              lambda: 'return x < ${heatsink_fan_threshold} - 5.0;'
+            then:
+              - switch.turn_off: fan_switch
+        # Overheat safety with hysteresis (auto-resume when cooled)
+        - if:
+            condition:
+              lambda: 'return x > ${heatsink_overheat_threshold};'
+            then:
+              - globals.set:
+                  id: overheat_active
+                  value: 'true'
+              - output.set_level:
+                  id: heater_output
+                  level: 0.0
+        - if:
+            condition:
+              lambda: 'return x < ${heatsink_overheat_threshold} - 5.0;'
+            then:
+              - globals.set:
+                  id: overheat_active
+                  value: 'false'
+
+  # AHT25 chamber temperature + humidity (3s interval: self-heating <0.1°C at this rate)
+  - platform: aht10
+    variant: AHT20
+    address: 0x38
+    update_interval: 3s
+    temperature:
+      name: "Dryer Temperature"
+      id: dryer_temp
+      device_class: temperature
+      filters:
+        - sliding_window_moving_average:
+            window_size: 5
+            send_every: 1
+    humidity:
+      name: "Dryer Humidity"
+      id: dryer_humidity
+      device_class: humidity
+      filters:
+        - sliding_window_moving_average:
+            window_size: 5
+            send_every: 1
+
+  # Heater output level
+  - platform: template
+    name: "Heater Output"
+    id: heater_level_pct
+    unit_of_measurement: "%"
+    lambda: |-
+      return id(heater_level) * 100.0;
+    update_interval: 5s
+
+  # Diagnostics
+  - platform: wifi_signal
+    name: "WiFi Signal dB"
+    id: wifi_signal_db
+    update_interval: 60s
+    device_class: signal_strength
+    entity_category: diagnostic
+
+  - platform: copy
+    source_id: wifi_signal_db
+    name: "WiFi Signal Percent"
+    id: wifi_signal_percent
+    filters:
+      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
+    unit_of_measurement: "%"
+    device_class: signal_strength
+    entity_category: diagnostic
+
+  - platform: internal_temperature
+    name: "Internal Temperature"
+    update_interval: 60s
+    entity_category: diagnostic
+
+  - platform: uptime
+    name: "Uptime"
+    update_interval: 150s
+    entity_category: diagnostic
+
+# BINARY SENSORS
+binary_sensor:
+  - platform: template
+    name: "Heater Active"
+    id: heater_active
+    device_class: heat
+    entity_category: diagnostic
+    lambda: 'return id(heater_level) > 0.05;'
+  # Overheat safety flag — set by heatsink sensor on_value
+  - platform: template
+    name: "Overheat Safety"
+    id: overheat_safety
+    device_class: problem
+    entity_category: diagnostic
+    lambda: 'return id(overheat_active);'
+
+# OUTPUTS
+output:
+  # Heater output interceptor — tracks level in global for lambdas to read
+  # (slow_pwm.state is protected, cannot be read from lambdas directly)
+  - platform: template
+    type: float
+    id: heater_intercept
+    write_action:
+      - if:
+          condition:
+            lambda: 'return id(overheat_active);'
+          then:
+            - globals.set:
+                id: heater_level
+                value: '0.0'
+            - output.set_level:
+                id: heater_output
+                level: 0.0
+          else:
+            - globals.set:
+                id: heater_level
+                value: !lambda 'return state;'
+            - output.set_level:
+                id: heater_output
+                level: !lambda 'return id(heater_level);'
+
+  # Heater SSR
+  # LOW = SSR ON (heating), HIGH = SSR OFF (active-low trigger)
+  # IMPORTANT: Add external 10kΩ pull-up to 3.3V on GPIO7 so the SSR
+  # stays OFF during MCU reset (floating pin on active-low input = risk)
+  - platform: slow_pwm
+    pin:
+      number: ${heater_pin}
+      inverted: true
+    id: heater_output
+    period: 10s
+
+  # Fan MOSFET
+  # NOTE: GPIO10 may have a weak pull-up during boot, briefly turning fan on.
+  # A 10kΩ pulldown on GPIO10 prevents this if it's noticeable.
+  - platform: gpio
+    pin:
+      number: ${fan_pin}
+    id: fan_output
+
+# SWITCHES
+switch:
+  - platform: output
+    name: "Circulation Fan"
+    id: fan_switch
+    output: fan_output
+    restore_mode: RESTORE_DEFAULT_OFF
+
+# CLIMATE
+climate:
+  - platform: pid
+    name: "Dryer Climate"
+    id: dryer_climate
+    sensor: dryer_temp
+    default_target_temperature: 45
+    heat_output: heater_intercept
+    visual:
+      min_temperature: 30
+      max_temperature: 70
+      temperature_step: 1
+    control_parameters:
+      kp: 0.35806
+      ki: 0.00368
+      kd: 8.71010
+# DISPLAY
+display:
+  - platform: ssd1306_i2c
+    model: "SSD1306 72x40"
+    address: ${oled_address}
+    contrast: ${oled_contrast}
+    id: oled
+    offset_x: 0
+    offset_y: 0
+    update_interval: 2s
+    lambda: |-
+      it.fill(COLOR_OFF);
+
+      // Status
+      bool is_off = id(dryer_climate).mode == climate::CLIMATE_MODE_OFF;
+      bool is_heating = id(heater_level) > 0.05;
+
+      if (id(overheat_active)) {
+        it.print(0, 0, id(font_small), "CUTOFF");
+      } else if (is_off) {
+        it.print(0, 0, id(font_small), "OFF");
+      } else if (is_heating) {
+        it.print(0, 0, id(font_small), "HEATING");
+      } else {
+        it.print(0, 0, id(font_small), "HOLD");
+      }
+
+      // Target setpoint — right-aligned
+      if (!is_off) {
+        char target_buf[8];
+        snprintf(target_buf, sizeof(target_buf), "%.0f" "°C", id(dryer_climate).target_temperature);
+        it.print(71, 0, id(font_small), TextAlign::TOP_RIGHT, target_buf);
+      }
+
+      // Main: temperature left, humidity (icon + value) right
+      if (id(dryer_temp).has_state()) {
+        it.printf(0, 11, id(font_large), "%.1f"  "°C", id(dryer_temp).state);
+      } else {
+        it.print(0, 11, id(font_large), "--.-"  "°C");
+      }
+
+      if (id(dryer_humidity).has_state()) {
+        char hum_buf[8];
+        snprintf(hum_buf, sizeof(hum_buf), "%.0f", id(dryer_humidity).state);
+        int hum_w = strlen(hum_buf) * 7;  // conservative char width estimate for 14pt
+        int hum_x = 72 - 13 - hum_w - 2;   // 2px right margin
+        it.print(hum_x, 12, id(icon_font), "\U0000f87e");    // icon
+        it.print(hum_x + 13, 12, id(font_large), hum_buf);   // value
+      }
+
+      // Heater output bar
+      if (!is_off) {
+        int bar_w = (int)(72.0f * id(heater_level));
+        if (bar_w < 0) bar_w = 0;
+        if (bar_w > 72) bar_w = 72;
+        if (bar_w > 0) {
+          it.filled_rectangle(0, 36, bar_w, 4);
+        }
+      }
+
+button:
+  # Press to run autotune — will cycle heater on/off to measure thermal response.
+  # Runs in HEAT mode (heat-only system). The harmless "Autotune configured without
+  # cool_output — ignoring" warning in the logs can be safely ignored.
+  # Check logs for kp/ki/kd values after completion, then update YAML.
+  - platform: template
+    name: "PID Autotune"
+    entity_category: diagnostic
+    on_press:
+      - climate.pid.autotune:
+          id: dryer_climate
+
+  - platform: restart
+    name: "Restart"
+    entity_category: diagnostic
+
+  - platform: safe_mode
+    name: "Safe Mode"
+    entity_category: diagnostic
+
+# TEXT SENSORS
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: "IP Address"
+      entity_category: diagnostic
+    ssid:
+      name: "Connected SSID"
+      entity_category: diagnostic
+
+  - platform: version
+    name: "ESPHome Version"
+    entity_category: diagnostic

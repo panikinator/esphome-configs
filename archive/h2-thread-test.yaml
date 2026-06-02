@@ -1,0 +1,32 @@
+esphome:
+  name: h2-thread-test
+  friendly_name: h2-thread-test
+
+esp32:
+  board: esp32-h2-devkitm-1
+  framework:
+    type: esp-idf
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "IkkXsneqIF2HcZMQo6XZ2NoO/pigMFvkYa6/VCTYOpc="
+
+ota:
+  - platform: esphome
+    password: "cec8dc4616836f14297bc8739ff18f8d"
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "H2-Thread-Test Fallback Hotspot"
+    password: "fGC5xEkYDoyT"
+
+captive_portal:
+    

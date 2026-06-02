@@ -15,3 +15,6 @@
 # Local tooling
 /AGENTS.md
 /opencode.json
+
+# Python bytecode
+__pycache__/
