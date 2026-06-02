@@ -6,3 +6,12 @@
 /.venv/
 /.esphome.bak/
 .python-version
+
+# ESPHome Device Builder (auto-managed, local-only)
+/.device-builder.json
+/.device-builder.json.lock
+/.device-builder-peer-link-key.bin
+
+# Local tooling
+/AGENTS.md
+/opencode.json
