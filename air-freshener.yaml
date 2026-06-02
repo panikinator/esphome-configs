@@ -47,6 +47,7 @@ esp8266:
   restore_from_flash: true
 
 logger:
+  level: INFO
 api:
   encryption:
     key: !secret default_native_api_encryption_key
@@ -60,7 +61,7 @@ wifi:
   ap:
     ssid: "Air-Freshener Fallback Hotspot"
     password: !secret fallback_ap_password
-  reboot_timeout: 1.5h
+  reboot_timeout: 2h
   power_save_mode: NONE
 captive_portal: {}
 

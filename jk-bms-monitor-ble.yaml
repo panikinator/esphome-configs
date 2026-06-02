@@ -6,6 +6,7 @@ substitutions:
   bms_mac_address: C8:47:80:42:5A:33
   eta_min_current_a: "0.25"        # Ignore ETAs when |I| is below this (A)
   eta_max_hours: "72"             # Cap ETA to avoid absurd values
+  eta_min_power_w: "10"          # Minimum meaningful power for ETA calculations (W)
   # Protocol version options: JK02_24S, JK02_32S, JK04
   # JK02_24S: For most common JK-BMS models (up to 24 cells)
   # JK02_32S: For newer models with 32S support (firmware v11+)
@@ -200,7 +201,7 @@ sensor:
       id: pack_current
     power:
       name: "power"
-      id: power_db
+      id: power_signed
     # charging_power:
     #   name: "charging power"
     # discharging_power:
@@ -252,35 +253,37 @@ sensor:
     device_class: "signal_strength"
     entity_category: diagnostic
 
-  # Smoothed current (fast and slow windows) for ETA calculations
+  # Smoothened power for more stable ETAs ?
   - platform: copy
-    source_id: pack_current
-    name: "Current Avg Fast"
-    id: current_avg_fast
+    source_id: power_signed
+    name: "Power Smoothed Fast"
+    id: power_smoothed_fast
     internal: true
     filters:
       - sliding_window_moving_average:
           window_size: 12   # ~2 min at 10s updates
           send_every: 1
           send_first_at: 1
-    unit_of_measurement: "A"
-    device_class: current
+    unit_of_measurement: "W"
+    device_class: power
     state_class: measurement
   - platform: copy
-    source_id: pack_current
-    name: "Current Avg Slow"
-    id: current_avg_slow
+    source_id: power_signed
+    name: "Power Smoothed Slow"
+    id: power_smoothed_slow
     internal: true
     filters:
       - sliding_window_moving_average:
           window_size: 60   # ~10 min at 10s updates
           send_every: 1
           send_first_at: 1
-    unit_of_measurement: "A"
-    device_class: current
+    unit_of_measurement: "W"
+    device_class: power
     state_class: measurement
 
-  # ETA estimates (hours); publish NAN when not meaningful to keep UI clean
+
+
+  # ETA estimates based on power instead of current
   - platform: template
     name: "Time To Empty"
     id: time_to_empty_hours
@@ -289,22 +292,22 @@ sensor:
     state_class: measurement
     accuracy_decimals: 2
     lambda: |-
-      const float i_fast = id(current_avg_fast).state;
-      const float i_slow = id(current_avg_slow).state;
+      const float p_fast = id(power_smoothed_fast).state;  // W
+      const float p_slow = id(power_smoothed_slow).state;  // W
       const float cap_rem = id(capacity_remaining_ah).state;  // Ah
-      const float min_i = ${eta_min_current_a};
-      const float max_h = ${eta_max_hours};
+      const float volt = id(pack_voltage).state;       // V
+      const float min_p = ${eta_min_power_w}; // Minimum meaningful power
+      const float pack_energy = cap_rem * volt;  // Remaining energy in Wh
 
-      if (!std::isfinite(i_fast) || !std::isfinite(i_slow) || !std::isfinite(cap_rem)) return NAN;
+      if (!std::isfinite(p_fast) || !std::isfinite(p_slow) || !std::isfinite(cap_rem) || !std::isfinite(volt)) return NAN;
 
       // Blend fast/slow windows to soften spikes but react within minutes
-      float i = 0.6f * i_slow + 0.4f * i_fast;
+      float p = 0.6f * p_slow + 0.4f * p_fast;
+      if (p > -min_p) return NAN; // Not discharging meaningfully
 
-      if (i >= -min_i) return NAN;  // Not discharging meaningfully
-
-      const float hours = cap_rem / -i;  // remaining Ah divided by discharge A
-      if (!std::isfinite(hours) || hours <= 0) return NAN;
-      return hours > max_h ? max_h : hours;
+      const float hours = pack_energy / -p;  // remaining Wh divided by discharge W
+      if (!std::isfinite(hours) || hours < 0) return NAN;
+      return hours;
 
   - platform: template
     name: "Time To Full"
@@ -314,30 +317,28 @@ sensor:
     state_class: measurement
     accuracy_decimals: 2
     lambda: |-
-      const float i_fast = id(current_avg_fast).state;
-      const float i_slow = id(current_avg_slow).state;
-      const float soc = id(soc_percent).state;              // %
-      const float rated = id(capacity_setting_ah).state;    // Ah (JK setting)
-      const float min_i = ${eta_min_current_a};
-      const float max_h = ${eta_max_hours};
+      const float p_fast = id(power_smoothed_fast).state;  // W
+      const float p_slow = id(power_smoothed_slow).state;  // W
+      const float cap_rem = id(capacity_remaining_ah).state;  // Ah
+      const float volt = id(pack_voltage).state;       // V
+      const float min_p = ${eta_min_power_w}; // Minimum meaningful power
+      const float pack_energy = cap_rem * volt;  // Remaining energy in Wh
+      const float pack_energy_full = id(capacity_setting_ah).state * 8 * 3.25;  // Full energy in Wh
 
-      if (!std::isfinite(i_fast) || !std::isfinite(i_slow) || !std::isfinite(soc) || !std::isfinite(rated) || rated <= 0) return NAN;
+      if (!std::isfinite(p_fast) || !std::isfinite(p_slow) || !std::isfinite(cap_rem) || !std::isfinite(volt)) return NAN;
 
-      // Blend fast/slow windows to soften spikes but react within minutes
-      float i = 0.6f * i_slow + 0.4f * i_fast;
+      float p = 0.6f * p_slow + 0.4f * p_fast;
 
-      if (i <= min_i) return NAN;  // Not charging meaningfully
+      if (p < min_p) return NAN;  // Not charging meaningfully
 
-      float soc_clamped = soc;
-      if (!std::isfinite(soc_clamped)) return NAN;
-      if (soc_clamped < 0.0f) soc_clamped = 0.0f;
-      if (soc_clamped > 100.0f) soc_clamped = 100.0f;
-      const float missing_ah = rated * (1.0f - soc_clamped / 100.0f);
-      if (missing_ah <= 0) return NAN;
+      const float missing_energy = pack_energy_full - pack_energy;  // Energy needed to full charge in Wh
+      if (missing_energy <= 0) return NAN;
 
-      const float hours = missing_ah / i;  // Ah needed divided by charge A
-      if (!std::isfinite(hours) || hours <= 0) return NAN;
-      return hours > max_h ? max_h : hours;
+      const float hours = missing_energy / p;  // Wh needed divided by charge W
+      if (!std::isfinite(hours) || hours < 0) return NAN;
+      return hours;
+
+
 
 
   - platform: internal_temperature
