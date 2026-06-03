@@ -9,7 +9,7 @@ substitutions:
   oled_address: "0x3C"
   heatsink_fan_threshold: 50.0
   heatsink_overheat_threshold: 85.0
-  oled_contrast: "50%"
+  oled_contrast: "30%"
 
 esphome:
   name: ${name}
@@ -336,6 +336,23 @@ display:
           it.filled_rectangle(0, 36, bar_w, 4);
         }
       }
+
+# NUMBER INPUTS
+number:
+  - platform: template
+    name: "Display Contrast"
+    id: display_contrast
+    min_value: 0
+    max_value: 100
+    step: 1
+    initial_value: 30
+    optimistic: true
+    restore_value: true
+    unit_of_measurement: "%"
+    entity_category: config
+    on_value:
+      then:
+        - lambda: 'id(oled).set_contrast(x / 100.0f);'
 
 button:
   # Press to run autotune — will cycle heater on/off to measure thermal response.
