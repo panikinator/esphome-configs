@@ -352,7 +352,7 @@ number:
     entity_category: config
     on_value:
       then:
-        - lambda: 'id(oled).set_contrast(x / 100.0f);'
+        - lambda: 'id(oled).set_contrast(powf(x / 100.0f, 2.2f));'
 
 button:
   # Press to run autotune — will cycle heater on/off to measure thermal response.
